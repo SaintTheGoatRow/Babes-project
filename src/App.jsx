@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Sun, Moon, Plus, Search, Trash2, Download, 
   ChevronRight, UserPlus, X, Users, CreditCard, Wallet, 
-  ShieldCheck, ArrowRight, CheckCircle2, UserCheck, LogOut, Loader2, UserX
+  ShieldCheck, ArrowRight, CheckCircle2, UserCheck, LogOut, Loader2, UserX, Eye
 } from 'lucide-react';
 import { supabase } from './lib/supabaseClient';
 
@@ -28,10 +28,11 @@ export default function App() {
     { username: 'Dinda', password: 'Twalumba10', name: 'Dinda Nkeete', role: 'admin' }
   ]);
 
-  // Main Database States
+  // Main Database & Network States
   const [members, setMembers] = useState([]);
   const [payments, setPayments] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [statusMessage, setStatusMessage] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   
   // Modals
@@ -57,28 +58,43 @@ export default function App() {
 
   const toggleTheme = () => setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
 
-  // FETCH DATA FROM SUPABASE ON MOUNT
+  // FETCH DATA FROM SUPABASE WITH TIMEOUT & ERROR HANDLING
   useEffect(() => {
     fetchDatabaseData();
   }, []);
 
   async function fetchDatabaseData() {
     setLoading(true);
-    
-    const { data: membersData, error: membersError } = await supabase
-      .from('members')
-      .select('*')
-      .order('name', { ascending: true });
+    setStatusMessage('');
 
-    const { data: paymentsData, error: paymentsError } = await supabase
-      .from('payments')
-      .select('*')
-      .order('date', { ascending: false });
+    const timer = setTimeout(() => {
+      setStatusMessage('Establishing secure connection to database...');
+    }, 4000);
 
-    if (!membersError && membersData) setMembers(membersData);
-    if (!paymentsError && paymentsData) setPayments(paymentsData);
+    try {
+      const { data: membersData, error: membersError } = await supabase
+        .from('members')
+        .select('*')
+        .order('name', { ascending: true });
 
-    setLoading(false);
+      const { data: paymentsData, error: paymentsError } = await supabase
+        .from('payments')
+        .select('*')
+        .order('date', { ascending: false });
+
+      if (membersError) throw membersError;
+      if (paymentsError) throw paymentsError;
+
+      if (membersData) setMembers(membersData);
+      if (paymentsData) setPayments(paymentsData);
+      setStatusMessage('');
+    } catch (err) {
+      console.error('Database connection error:', err.message);
+      setStatusMessage('Network latency detected. Please check your data connection.');
+    } finally {
+      clearTimeout(timer);
+      setLoading(false);
+    }
   }
 
   // AUTH HANDLERS
@@ -95,7 +111,7 @@ export default function App() {
       setIsAuthenticated(true);
       setLoginForm({ username: '', password: '' });
     } else {
-      setAuthError('Invalid username or password.');
+      setAuthError('Invalid credentials. Please verify your username and password.');
     }
   };
 
@@ -105,7 +121,7 @@ export default function App() {
     setAuthSuccess('');
 
     if (!registerForm.name || !registerForm.password) {
-      setAuthError('Please fill in all required fields.');
+      setAuthError('Full name and password are required.');
       return;
     }
 
@@ -134,7 +150,7 @@ export default function App() {
       setMembers(prev => [...prev, data[0]]);
     }
 
-    setAuthSuccess(`Account created! Username: ${username}`);
+    setAuthSuccess(`Account provisioned. Your username is: ${username}`);
     setTimeout(() => {
       setAuthMode('login');
       setLoginForm({ username: username, password: registerForm.password });
@@ -174,11 +190,11 @@ export default function App() {
   };
 
   const handleDeleteMember = async (memberId, e) => {
-    if (e) e.stopPropagation(); // Prevent opening modal when clicking delete button
+    if (e) e.stopPropagation();
     if (!isAdmin) return;
 
     const target = members.find(m => m.id === memberId);
-    const confirmDelete = window.confirm(`Are you sure you want to delete ${target?.name || 'this member'}? All associated payment logs will also be permanently removed.`);
+    const confirmDelete = window.confirm(`Remove ${target?.name || 'this member'} from the ledger? All associated transaction logs will be permanently deleted.`);
     if (!confirmDelete) return;
 
     const { error } = await supabase
@@ -187,7 +203,7 @@ export default function App() {
       .eq('id', memberId);
 
     if (error) {
-      alert(`Failed to delete person: ${error.message}`);
+      alert(`Deletion failed: ${error.message}`);
     } else {
       setMembers(prev => prev.filter(m => m.id !== memberId));
       setPayments(prev => prev.filter(p => p.member_id !== memberId));
@@ -229,7 +245,7 @@ export default function App() {
       .select();
 
     if (error) {
-      alert(`Database Error: ${error.message}`);
+      alert(`Transaction Error: ${error.message}`);
     } else if (data) {
       setPayments(prev => [data[0], ...prev]);
       setIsAddPaymentOpen(false);
@@ -245,7 +261,7 @@ export default function App() {
       .eq('id', id);
 
     if (error) {
-      alert(`Failed to delete record: ${error.message}`);
+      alert(`Failed to void transaction: ${error.message}`);
     } else {
       setPayments(prev => prev.filter(p => p.id !== id));
     }
@@ -283,7 +299,7 @@ export default function App() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `payment_ledger_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `zica_ledger_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -295,6 +311,41 @@ export default function App() {
            (m.student_id && m.student_id.toLowerCase().includes(search));
   });
 
+  // Shared Input Styles
+  const inputClass = `w-full px-3.5 py-2.5 rounded-lg border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
+    isDark 
+      ? 'bg-slate-950 border-slate-800 text-slate-100 placeholder-slate-500 focus:border-emerald-500' 
+      : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400 focus:border-emerald-600'
+  }`;
+
+  const labelClass = `block text-xs font-medium mb-1.5 ${
+    isDark ? 'text-slate-300' : 'text-slate-700'
+  }`;
+
+  // INITIAL LOADING SCREEN
+  if (loading) {
+    return (
+      <div className={`min-h-screen flex flex-col items-center justify-center p-6 transition-colors duration-200 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
+        <div className="flex flex-col items-center space-y-4 text-center max-w-sm">
+          <div className="w-12 h-12 rounded-xl bg-emerald-600 flex items-center justify-center text-white font-bold text-xl shadow-sm">
+            Z
+          </div>
+          <div className="flex items-center space-x-2.5">
+            <Loader2 size={18} className="animate-spin text-emerald-500" />
+            <span className="text-sm font-medium tracking-wide">Synchronizing Ledger Records...</span>
+          </div>
+          {statusMessage && (
+            <p className={`text-xs px-3.5 py-2 rounded-lg border ${
+              isDark ? 'text-amber-300 bg-amber-950/40 border-amber-800/50' : 'text-amber-800 bg-amber-50 border-amber-200'
+            }`}>
+              {statusMessage}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // LOGIN / REGISTER SCREEN
   if (!isAuthenticated) {
     return (
@@ -302,163 +353,160 @@ export default function App() {
         
         <button
           onClick={toggleTheme}
-          className={`fixed top-4 right-4 p-2.5 rounded-2xl border transition-all ${
-            isDark ? 'border-slate-800 bg-slate-900 text-amber-400' : 'border-slate-300 bg-white text-slate-700 shadow-md'
+          aria-label="Toggle Theme"
+          className={`fixed top-5 right-5 p-2.5 rounded-lg border transition-colors ${
+            isDark ? 'border-slate-800 bg-slate-900 text-slate-300 hover:text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 shadow-sm'
           }`}
         >
           {isDark ? <Sun size={18} /> : <Moon size={18} />}
         </button>
 
-        <div className={`w-full max-w-sm p-6 sm:p-8 rounded-3xl border shadow-2xl space-y-5 ${
-          isDark ? 'bg-slate-900/90 border-slate-800/80 backdrop-blur-xl' : 'bg-white border-slate-200'
+        <div className={`w-full max-w-md p-7 sm:p-9 rounded-2xl border shadow-xl space-y-6 ${
+          isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
         }`}>
-          <div className="text-center space-y-1.5">
-            <div className="w-12 h-12 mx-auto rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-slate-950 font-black text-xl shadow-lg shadow-emerald-500/30">
+          <div className="text-center space-y-2">
+            <div className="w-12 h-12 mx-auto rounded-xl bg-emerald-600 flex items-center justify-center text-white font-bold text-xl shadow-sm">
               Z
             </div>
-            <h1 className="text-xl font-black uppercase tracking-tight bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
-              ZICA Publicity Department
-            </h1>
-            <p className="text-[10px] text-slate-400 font-mono uppercase tracking-wider">
-              {authMode === 'login' ? 'Authentication Required' : 'Create Viewer Account'}
-            </p>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight">
+                ZICA Publicity Department
+              </h1>
+              <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                {authMode === 'login' ? 'Sign in to access the financial ledger' : 'Register for read-only ledger access'}
+              </p>
+            </div>
           </div>
 
           {authError && (
-            <div className="p-3 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-400 text-xs font-mono text-center">
+            <div className={`p-3 rounded-lg border text-xs text-center font-medium ${
+              isDark ? 'border-rose-900/60 bg-rose-950/50 text-rose-300' : 'border-rose-200 bg-rose-50 text-rose-700'
+            }`}>
               {authError}
             </div>
           )}
 
           {authSuccess && (
-            <div className="p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs font-mono text-center flex items-center justify-center space-x-1.5">
-              <CheckCircle2 size={15} />
+            <div className={`p-3 rounded-lg border text-xs text-center font-medium flex items-center justify-center space-x-2 ${
+              isDark ? 'border-emerald-800/60 bg-emerald-950/50 text-emerald-300' : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+            }`}>
+              <CheckCircle2 size={16} />
               <span>{authSuccess}</span>
             </div>
           )}
 
           {authMode === 'login' ? (
-            <form onSubmit={handleLogin} className="space-y-3.5 font-mono text-xs">
+            <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="block text-slate-400 uppercase mb-1 text-[10px] font-semibold">Username / Admin ID</label>
+                <label className={labelClass}>Username or Admin ID</label>
                 <input
                   type="text"
                   required
-                  placeholder="Username"
+                  placeholder="Enter your username"
                   value={loginForm.username}
                   onChange={e => setLoginForm({ ...loginForm, username: e.target.value })}
-                  className={`w-full p-3 rounded-xl border text-xs focus:outline-none ${
-                    isDark ? 'bg-slate-950 border-slate-800 text-white focus:border-emerald-500' : 'bg-slate-50 border-slate-300 text-slate-900'
-                  }`}
+                  className={inputClass}
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 uppercase mb-1 text-[10px] font-semibold">Password</label>
+                <label className={labelClass}>Password</label>
                 <input
                   type="password"
                   required
-                  placeholder="Password "
+                  placeholder="Enter your password"
                   value={loginForm.password}
                   onChange={e => setLoginForm({ ...loginForm, password: e.target.value })}
-                  className={`w-full p-3 rounded-xl border text-xs focus:outline-none ${
-                    isDark ? 'bg-slate-950 border-slate-800 text-white focus:border-emerald-500' : 'bg-slate-50 border-slate-300 text-slate-900'
-                  }`}
+                  className={inputClass}
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full py-3.5 rounded-xl text-xs uppercase font-bold tracking-wider bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center space-x-2"
+                className="w-full py-2.5 px-4 rounded-lg text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-sm flex items-center justify-center space-x-2 mt-2"
               >
-                <span>Access Dashboard</span>
-                <ArrowRight size={15} />
+                <span>Sign In</span>
+                <ArrowRight size={16} />
               </button>
             </form>
           ) : (
-            <form onSubmit={handleRegister} className="space-y-3 font-mono text-xs">
+            <form onSubmit={handleRegister} className="space-y-3.5">
               <div>
-                <label className="block text-slate-400 uppercase mb-1 text-[10px] font-semibold">Full Name *</label>
+                <label className={labelClass}>Full Name <span className="text-rose-500">*</span></label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Dinda Nkeete"
                   value={registerForm.name}
                   onChange={e => setRegisterForm({ ...registerForm, name: e.target.value })}
-                  className={`w-full p-2.5 rounded-xl border text-xs focus:outline-none ${
-                    isDark ? 'bg-slate-950 border-slate-800 text-white focus:border-emerald-500' : 'bg-slate-50 border-slate-300 text-slate-900'
-                  }`}
+                  className={inputClass}
                 />
               </div>
 
-              <div>
-                <label className="block text-slate-400 uppercase mb-1 text-[10px] font-semibold">Student ID</label>
-                <input
-                  type="text"
-                  placeholder="e.g. 202500652"
-                  value={registerForm.studentId}
-                  onChange={e => setRegisterForm({ ...registerForm, studentId: e.target.value })}
-                  className={`w-full p-2.5 rounded-xl border text-xs focus:outline-none ${
-                    isDark ? 'bg-slate-950 border-slate-800 text-white focus:border-emerald-500' : 'bg-slate-50 border-slate-300 text-slate-900'
-                  }`}
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className={labelClass}>Student ID</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 202501869"
+                    value={registerForm.studentId}
+                    onChange={e => setRegisterForm({ ...registerForm, studentId: e.target.value })}
+                    className={inputClass}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>Email Address</label>
+                  <input
+                    type="email"
+                    placeholder="name@example.com"
+                    value={registerForm.email}
+                    onChange={e => setRegisterForm({ ...registerForm, email: e.target.value })}
+                    className={inputClass}
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="block text-slate-400 uppercase mb-1 text-[10px] font-semibold">Email Address</label>
-                <input
-                  type="email"
-                  placeholder="e.g. user@example.com"
-                  value={registerForm.email}
-                  onChange={e => setRegisterForm({ ...registerForm, email: e.target.value })}
-                  className={`w-full p-2.5 rounded-xl border text-xs focus:outline-none ${
-                    isDark ? 'bg-slate-950 border-slate-800 text-white focus:border-emerald-500' : 'bg-slate-50 border-slate-300 text-slate-900'
-                  }`}
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 uppercase mb-1 text-[10px] font-semibold">Password *</label>
+                <label className={labelClass}>Password <span className="text-rose-500">*</span></label>
                 <input
                   type="password"
                   required
-                  placeholder="Create password"
+                  placeholder="Create a secure password"
                   value={registerForm.password}
                   onChange={e => setRegisterForm({ ...registerForm, password: e.target.value })}
-                  className={`w-full p-2.5 rounded-xl border text-xs focus:outline-none ${
-                    isDark ? 'bg-slate-950 border-slate-800 text-white focus:border-emerald-500' : 'bg-slate-50 border-slate-300 text-slate-900'
-                  }`}
+                  className={inputClass}
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full py-3.5 rounded-xl text-xs uppercase font-bold tracking-wider bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-all shadow-lg shadow-emerald-500/20"
+                className="w-full py-2.5 px-4 rounded-lg text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-sm mt-2"
               >
-                Create Account
+                Create Viewer Account
               </button>
             </form>
           )}
 
-          <div className="pt-1 text-center">
+          <div className={`pt-4 border-t text-center ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
             {authMode === 'login' ? (
-              <p className="text-[11px] text-slate-400 font-mono">
-                Need a viewer account?{' '}
+              <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                Don't have an account?{' '}
                 <button
                   type="button"
                   onClick={() => { setAuthMode('register'); setAuthError(''); }}
-                  className="text-emerald-400 hover:underline font-bold"
+                  className="text-emerald-500 hover:text-emerald-400 font-semibold"
                 >
-                  Create Account
+                  Request Viewer Access
                 </button>
               </p>
             ) : (
-              <p className="text-[11px] text-slate-400 font-mono">
-                Already registered?{' '}
+              <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                Already have an account?{' '}
                 <button
                   type="button"
                   onClick={() => { setAuthMode('login'); setAuthError(''); }}
-                  className="text-emerald-400 hover:underline font-bold"
+                  className="text-emerald-500 hover:text-emerald-400 font-semibold"
                 >
                   Sign In
                 </button>
@@ -472,148 +520,161 @@ export default function App() {
 
   // MAIN DASHBOARD VIEW
   return (
-    <div className={`min-h-screen transition-colors duration-200 pb-12 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
+    <div className={`min-h-screen transition-colors duration-200 pb-16 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
       
-      {/* HEADER */}
-      <header className={`border-b sticky top-0 z-30 ${isDark ? 'border-slate-800/80 bg-slate-950/90' : 'border-slate-200 bg-white/90'} backdrop-blur-md`}>
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-2">
+      {/* TOP NAVIGATION BAR */}
+      <header className={`border-b sticky top-0 z-30 ${isDark ? 'border-slate-800 bg-slate-900/95' : 'border-slate-200 bg-white/95'} backdrop-blur-md`}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
           
-          <div className="flex items-center space-x-2 min-w-0">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex-shrink-0 flex items-center justify-center text-slate-950 font-black text-sm sm:text-lg shadow-md shadow-emerald-500/20">
+          <div className="flex items-center space-x-3 min-w-0">
+            <div className="w-9 h-9 rounded-lg bg-emerald-600 flex-shrink-0 flex items-center justify-center text-white font-bold text-base shadow-sm">
               Z
             </div>
             <div className="min-w-0">
-              <h1 className="font-black text-xs sm:text-base tracking-tight uppercase bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent truncate">
+              <h1 className="font-bold text-sm sm:text-base tracking-tight truncate">
                 ZICA Publicity Department
               </h1>
-              <p className="text-[9px] sm:text-[10px] text-slate-400 font-medium tracking-tight truncate">ONLINE DATABASE</p>
+              <p className={`text-[11px] font-medium truncate ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                Treasury & Member Ledger
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-1.5 flex-shrink-0">
-            <div className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold uppercase tracking-wider flex items-center space-x-1 border ${
-              isAdmin ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400' : 'border-cyan-500/40 bg-cyan-500/10 text-cyan-400'
+          <div className="flex items-center space-x-2 flex-shrink-0">
+            <div className={`px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center space-x-1.5 border ${
+              isAdmin 
+                ? (isDark ? 'border-emerald-800/60 bg-emerald-950/60 text-emerald-400' : 'border-emerald-200 bg-emerald-50 text-emerald-700')
+                : (isDark ? 'border-slate-700 bg-slate-800 text-slate-300' : 'border-slate-200 bg-slate-100 text-slate-700')
             }`}>
-              {isAdmin ? <ShieldCheck size={12} /> : <UserCheck size={12} />}
-              <span className="truncate max-w-[70px] sm:max-w-none">{currentUser.name}</span>
+              {isAdmin ? <ShieldCheck size={14} /> : <UserCheck size={14} />}
+              <span className="truncate max-w-[90px] sm:max-w-none">{currentUser.name}</span>
             </div>
 
             <button
-              onClick={handleLogout}
-              className={`p-1.5 sm:p-2 rounded-lg border transition-all ${
-                isDark ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-rose-400' : 'border-slate-200 bg-white text-slate-600 shadow-sm'
+              onClick={toggleTheme}
+              className={`p-2 rounded-lg border transition-colors ${
+                isDark ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-slate-200' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
               }`}
-              title="Sign Out"
+              title="Switch Theme"
             >
-              <LogOut size={15} />
+              {isDark ? <Sun size={16} /> : <Moon size={16} />}
             </button>
 
             <button
-              onClick={toggleTheme}
-              className={`p-1.5 sm:p-2 rounded-lg border transition-all ${
-                isDark ? 'border-slate-800 bg-slate-900 text-amber-400' : 'border-slate-200 bg-white text-slate-700 shadow-sm'
+              onClick={handleLogout}
+              className={`p-2 rounded-lg border transition-colors ${
+                isDark ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-rose-400' : 'border-slate-200 bg-white text-slate-600 hover:text-rose-600'
               }`}
+              title="Sign Out"
             >
-              {isDark ? <Sun size={15} /> : <Moon size={15} />}
+              <LogOut size={16} />
             </button>
           </div>
         </div>
       </header>
 
-      {/* DASHBOARD CONTENT */}
-      <main className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-8 space-y-4 sm:space-y-6">
+      {/* MAIN CONTENT CONTAINER */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
         
-        {/* STATS SUMMARY */}
-        <div className="grid grid-cols-3 gap-2 sm:gap-4">
-          <div className={`p-3 sm:p-5 rounded-xl sm:rounded-2xl border ${isDark ? 'border-slate-800/80 bg-slate-900/60' : 'border-slate-200 bg-white shadow-sm'}`}>
+        {/* KPI METRIC CARDS */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className={`p-5 rounded-xl border ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white shadow-sm'}`}>
             <div className="flex items-center justify-between">
-              <span className="text-[9px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">Members</span>
-              <Users size={14} className="text-emerald-400 hidden sm:block" />
+              <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Registered Members</span>
+              <div className={`p-2 rounded-lg ${isDark ? 'bg-slate-800 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>
+                <Users size={16} />
+              </div>
             </div>
-            <p className="text-base sm:text-3xl font-black mt-1 font-mono">{members.length}</p>
+            <p className="text-2xl sm:text-3xl font-bold mt-2 font-mono tabular-nums">{members.length}</p>
           </div>
 
-          <div className={`p-3 sm:p-5 rounded-xl sm:rounded-2xl border ${isDark ? 'border-slate-800/80 bg-slate-900/60' : 'border-slate-200 bg-white shadow-sm'}`}>
+          <div className={`p-5 rounded-xl border ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white shadow-sm'}`}>
             <div className="flex items-center justify-between">
-              <span className="text-[9px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">Logs</span>
-              <CreditCard size={14} className="text-cyan-400 hidden sm:block" />
+              <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Recorded Transactions</span>
+              <div className={`p-2 rounded-lg ${isDark ? 'bg-slate-800 text-sky-400' : 'bg-sky-50 text-sky-600'}`}>
+                <CreditCard size={16} />
+              </div>
             </div>
-            <p className="text-base sm:text-3xl font-black mt-1 font-mono">{payments.length}</p>
+            <p className="text-2xl sm:text-3xl font-bold mt-2 font-mono tabular-nums">{payments.length}</p>
           </div>
 
-          <div className={`p-3 sm:p-5 rounded-xl sm:rounded-2xl border ${isDark ? 'border-slate-800/80 bg-slate-900/60' : 'border-slate-200 bg-white shadow-sm'}`}>
+          <div className={`p-5 rounded-xl border ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white shadow-sm'}`}>
             <div className="flex items-center justify-between">
-              <span className="text-[9px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">Total</span>
-              <Wallet size={14} className="text-teal-400 hidden sm:block" />
+              <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Total Treasury Balance</span>
+              <div className={`p-2 rounded-lg ${isDark ? 'bg-slate-800 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>
+                <Wallet size={16} />
+              </div>
             </div>
-            <p className="text-xs sm:text-3xl font-black mt-1 font-mono text-emerald-400 truncate">
-              K{payments.reduce((acc, p) => acc + Number(p.amount), 0).toLocaleString()}
+            <p className="text-2xl sm:text-3xl font-bold mt-2 font-mono tabular-nums text-emerald-500">
+              ZMW {payments.reduce((acc, p) => acc + Number(p.amount), 0).toLocaleString()}
             </p>
           </div>
         </div>
 
-        {/* SEARCH AND ACTION CONTROLS */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
-          <div className={`relative flex-1 rounded-xl border ${
-            isDark ? 'border-slate-800 bg-slate-900/80' : 'border-slate-300 bg-white shadow-sm'
+        {/* TOOLBAR: SEARCH & ACTIONS */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className={`relative flex-1 max-w-md rounded-lg border ${
+            isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-300 bg-white shadow-sm'
           }`}>
-            <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+            <Search className="absolute left-3.5 top-2.5 text-slate-400" size={16} />
             <input
               type="text"
-              placeholder="Search member name or ID..."
+              placeholder="Filter by member name or student ID..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className={`w-full bg-transparent pl-9 pr-3 py-2 text-xs focus:outline-none ${
-                isDark ? 'text-white placeholder-slate-500' : 'text-slate-900 placeholder-slate-400'
+              className={`w-full bg-transparent pl-10 pr-4 py-2 text-sm focus:outline-none ${
+                isDark ? 'text-slate-100 placeholder-slate-500' : 'text-slate-900 placeholder-slate-400'
               }`}
             />
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2.5">
             {isAdmin && (
               <>
                 <button
                   onClick={() => setIsAddMemberOpen(true)}
-                  className="flex-1 sm:flex-none px-3 py-2 rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-center space-x-1.5 bg-emerald-500 text-slate-950"
+                  className="flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center justify-center space-x-1.5 bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-sm"
                 >
-                  <UserPlus size={14} />
-                  <span>Person</span>
+                  <UserPlus size={15} />
+                  <span>Add Member</span>
                 </button>
 
                 <button
                   onClick={() => setIsAddPaymentOpen(true)}
-                  className={`flex-1 sm:flex-none px-3 py-2 rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-center space-x-1.5 border ${
-                    isDark ? 'border-slate-800 bg-slate-900 text-slate-200' : 'border-slate-300 bg-white text-slate-800 shadow-sm'
+                  className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center justify-center space-x-1.5 border transition-colors ${
+                    isDark 
+                      ? 'border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-100' 
+                      : 'border-slate-300 bg-white hover:bg-slate-50 text-slate-800 shadow-sm'
                   }`}
                 >
-                  <Plus size={14} />
-                  <span>Payment</span>
+                  <Plus size={15} />
+                  <span>Record Payment</span>
                 </button>
               </>
             )}
 
             <button
               onClick={exportCSV}
-              className={`p-2 rounded-xl border ${
-                isDark ? 'border-slate-800 bg-slate-900 text-slate-300' : 'border-slate-300 bg-white text-slate-700 shadow-sm'
+              className={`px-3 py-2 rounded-lg border text-xs sm:text-sm font-medium flex items-center space-x-1.5 transition-colors ${
+                isDark 
+                  ? 'border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300' 
+                  : 'border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-sm'
               }`}
-              title="Export CSV"
+              title="Export Ledger CSV"
             >
-              <Download size={16} />
+              <Download size={15} />
+              <span className="hidden md:inline">Export</span>
             </button>
           </div>
         </div>
 
-        {/* MOBILE CARD VIEW (< sm) */}
+        {/* MOBILE LIST VIEW (< sm) */}
         <div className="block sm:hidden space-y-2.5">
-          {loading ? (
-            <div className="py-8 text-center text-slate-400 text-xs flex items-center justify-center space-x-2">
-              <Loader2 size={16} className="animate-spin text-emerald-400" />
-              <span>Loading records...</span>
-            </div>
-          ) : filteredMembers.length === 0 ? (
-            <div className="py-8 text-center text-slate-500 text-xs font-mono uppercase">
-              No members found
+          {filteredMembers.length === 0 ? (
+            <div className={`py-12 text-center rounded-xl border text-sm ${
+              isDark ? 'border-slate-800 bg-slate-900/50 text-slate-400' : 'border-slate-200 bg-white text-slate-500'
+            }`}>
+              No matching member records found.
             </div>
           ) : (
             filteredMembers.map((m) => {
@@ -622,35 +683,36 @@ export default function App() {
                 <div
                   key={m.id}
                   onClick={() => setSelectedMemberModal(m)}
-                  className={`p-3.5 rounded-xl border transition-all active:scale-[0.98] flex items-center justify-between ${
-                    isDark ? 'border-slate-800 bg-slate-900/60 text-white' : 'border-slate-200 bg-white text-slate-900 shadow-sm'
+                  className={`p-4 rounded-xl border transition-all active:scale-[0.99] flex items-center justify-between ${
+                    isDark ? 'border-slate-800 bg-slate-900 text-slate-100' : 'border-slate-200 bg-white text-slate-900 shadow-sm'
                   }`}
                 >
-                  <div className="space-y-0.5 min-w-0 pr-2">
-                    <p className="font-bold text-xs truncate">{m.name}</p>
-                    <div className="flex items-center space-x-2 text-[10px] text-slate-400 font-mono">
-                      <span className="text-emerald-400 font-semibold">{m.student_id || 'No ID'}</span>
+                  <div className="space-y-1 min-w-0 pr-3">
+                    <p className="font-semibold text-sm truncate">{m.name}</p>
+                    <div className="flex items-center space-x-2 text-xs text-slate-400">
+                      <span className="font-mono text-emerald-500 font-medium">{m.student_id || 'Unassigned ID'}</span>
                       <span>•</span>
-                      <span>{mPayments.length} payment{mPayments.length !== 1 ? 's' : ''}</span>
+                      <span>{mPayments.length} {mPayments.length === 1 ? 'entry' : 'entries'}</span>
                     </div>
                   </div>
 
                   <div className="flex items-center space-x-2 flex-shrink-0">
-                    <span className={`text-[10px] px-2.5 py-1 rounded-md border font-mono font-bold ${
-                      isDark ? 'border-slate-800 bg-slate-950 text-emerald-400' : 'border-slate-200 bg-slate-50 text-emerald-600'
+                    <span className={`text-xs px-2.5 py-1 rounded-md border font-medium flex items-center space-x-1 ${
+                      isDark ? 'border-slate-700 bg-slate-800 text-slate-200' : 'border-slate-200 bg-slate-50 text-slate-700'
                     }`}>
-                      Tap to reveal sum
+                      <Eye size={12} />
+                      <span>Statement</span>
                     </span>
                     {isAdmin && (
                       <button
                         onClick={(e) => handleDeleteMember(m.id, e)}
-                        className="p-1.5 text-slate-500 hover:text-rose-400 transition-colors"
-                        title="Delete Person"
+                        className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors"
+                        title="Remove Member"
                       >
                         <Trash2 size={15} />
                       </button>
                     )}
-                    <ChevronRight size={16} className="text-slate-500" />
+                    <ChevronRight size={16} className="text-slate-400" />
                   </div>
                 </div>
               );
@@ -658,36 +720,27 @@ export default function App() {
           )}
         </div>
 
-        {/* DESKTOP TABLE VIEW (>= sm) */}
-        <div className={`hidden sm:block border rounded-2xl overflow-hidden shadow-xl ${isDark ? 'border-slate-800/80 bg-slate-900/40' : 'border-slate-200 bg-white'}`}>
+        {/* DESKTOP LEDGER TABLE (>= sm) */}
+        <div className={`hidden sm:block border rounded-xl overflow-hidden ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white shadow-sm'}`}>
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="w-full text-left border-collapse">
               <thead>
-                <tr className={`border-b text-[10px] uppercase font-mono ${
-                  isDark ? 'border-slate-800 bg-slate-900/90 text-slate-400' : 'border-slate-200 bg-slate-100/80 text-slate-600'
+                <tr className={`border-b text-xs font-semibold uppercase tracking-wider ${
+                  isDark ? 'border-slate-800 bg-slate-900/80 text-slate-400' : 'border-slate-200 bg-slate-50 text-slate-600'
                 }`}>
-                  <th className="py-3 px-4 font-semibold">Student ID</th>
-                  <th className="py-3 px-4 font-semibold">Full Name</th>
-                  <th className="py-3 px-4 font-semibold">Email</th>
-                  <th className="py-3 px-4 font-semibold text-center">Entries</th>
-                  <th className="py-3 px-4 font-semibold text-right">Total Paid</th>
-                  {isAdmin && <th className="py-3 px-4 font-semibold text-center">Action</th>}
+                  <th className="py-3.5 px-5">Student ID</th>
+                  <th className="py-3.5 px-5">Member Name</th>
+                  <th className="py-3.5 px-5">Email Address</th>
+                  <th className="py-3.5 px-5 text-center">Transactions</th>
+                  <th className="py-3.5 px-5 text-right">Account Statement</th>
+                  {isAdmin && <th className="py-3.5 px-5 text-center">Manage</th>}
                 </tr>
               </thead>
-              <tbody className={`divide-y font-mono ${isDark ? 'divide-slate-800/60' : 'divide-slate-200'}`}>
-                {loading ? (
+              <tbody className={`divide-y text-sm ${isDark ? 'divide-slate-800/80' : 'divide-slate-200'}`}>
+                {filteredMembers.length === 0 ? (
                   <tr>
-                    <td colSpan={isAdmin ? "6" : "5"} className="py-8 text-center text-slate-400 text-xs">
-                      <div className="flex items-center justify-center space-x-2">
-                        <Loader2 size={16} className="animate-spin text-emerald-400" />
-                        <span>Loading records...</span>
-                      </div>
-                    </td>
-                  </tr>
-                ) : filteredMembers.length === 0 ? (
-                  <tr>
-                    <td colSpan={isAdmin ? "6" : "5"} className="py-8 text-center text-slate-500 text-xs uppercase tracking-widest">
-                      No members found
+                    <td colSpan={isAdmin ? "6" : "5"} className="py-12 text-center text-slate-500">
+                      No matching member records found.
                     </td>
                   </tr>
                 ) : (
@@ -698,35 +751,41 @@ export default function App() {
                         key={m.id}
                         onClick={() => setSelectedMemberModal(m)}
                         className={`cursor-pointer transition-colors ${
-                          isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-100/70'
+                          isDark ? 'hover:bg-slate-800/60' : 'hover:bg-slate-50'
                         }`}
                       >
-                        <td className="py-3.5 px-4 font-semibold text-emerald-400">{m.student_id || 'N/A'}</td>
-                        <td className="py-3.5 px-4 font-bold flex items-center justify-between">
-                          <span>{m.name}</span>
-                          <ChevronRight size={14} className="text-slate-500" />
+                        <td className="py-3.5 px-5 font-mono text-xs font-medium text-emerald-500">
+                          {m.student_id || '—'}
                         </td>
-                        <td className="py-3.5 px-4 text-slate-400">{m.email || 'N/A'}</td>
-                        <td className="py-3.5 px-4 text-center">
-                          <span className={`px-2.5 py-1 text-[10px] rounded-full border ${
-                            isDark ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-slate-100 border-slate-300 text-slate-700'
+                        <td className="py-3.5 px-5 font-semibold">
+                          {m.name}
+                        </td>
+                        <td className={`py-3.5 px-5 text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                          {m.email || '—'}
+                        </td>
+                        <td className="py-3.5 px-5 text-center">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-700'
                           }`}>
-                            {mPayments.length} record{mPayments.length !== 1 ? 's' : ''}
+                            {mPayments.length}
                           </span>
                         </td>
-                        <td className="py-3.5 px-4 text-right">
-                          <span className={`text-[10px] px-3 py-1.5 rounded-lg border font-mono ${
-                            isDark ? 'border-slate-800 bg-slate-900 text-slate-400' : 'border-slate-200 bg-slate-50 text-slate-600'
+                        <td className="py-3.5 px-5 text-right">
+                          <span className={`inline-flex items-center space-x-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
+                            isDark 
+                              ? 'border-slate-700 bg-slate-800/80 text-slate-200 hover:border-emerald-500/50' 
+                              : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-emerald-500'
                           }`}>
-                            Tap row to reveal sum
+                            <Eye size={13} className="text-emerald-500" />
+                            <span>View Ledger</span>
                           </span>
                         </td>
                         {isAdmin && (
-                          <td className="py-3.5 px-4 text-center">
+                          <td className="py-3.5 px-5 text-center">
                             <button
                               onClick={(e) => handleDeleteMember(m.id, e)}
-                              className="text-slate-500 hover:text-rose-400 transition-colors p-1"
-                              title="Delete Person"
+                              className="text-slate-400 hover:text-rose-500 transition-colors p-1.5 rounded-lg"
+                              title="Remove Member"
                             >
                               <Trash2 size={15} />
                             </button>
@@ -743,96 +802,113 @@ export default function App() {
 
       </main>
 
-      {/* MEMBER DETAILS MODAL */}
+      {/* MEMBER STATEMENT MODAL */}
       {selectedMemberModal && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md">
-          <div className={`w-full max-w-2xl sm:rounded-2xl rounded-t-2xl border shadow-2xl p-4 sm:p-6 relative max-h-[92vh] overflow-y-auto ${
-            isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/75 backdrop-blur-sm p-0 sm:p-4">
+          <div className={`w-full max-w-2xl sm:rounded-2xl rounded-t-2xl border shadow-2xl overflow-hidden flex flex-col max-h-[90vh] ${
+            isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
           }`}>
-            <button onClick={() => setSelectedMemberModal(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white">
-              <X size={18} />
-            </button>
-
-            <div className="border-b pb-3 border-slate-800 mb-4">
-              <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-widest font-semibold">Individual Record</span>
-              <h3 className="text-xl font-black uppercase tracking-tight mt-0.5">{selectedMemberModal.name}</h3>
-              <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-slate-400 font-mono">
-                <span>ID: {selectedMemberModal.student_id || 'N/A'}</span>
-                <span>•</span>
-                <span>{selectedMemberModal.email || 'N/A'}</span>
-              </div>
-            </div>
-
-            <div className={`p-4 rounded-xl border mb-4 flex items-center justify-between ${
-              isDark ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-emerald-300 bg-emerald-50'
-            }`}>
+            {/* Modal Header */}
+            <div className={`px-6 py-4 border-b flex items-start justify-between ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
               <div>
-                <p className="text-[10px] font-mono uppercase tracking-wider text-emerald-500 font-bold">Total Paid</p>
-                <p className="text-2xl font-black mt-0.5 font-mono text-emerald-400">
-                  K{getMemberTotal(selectedMemberModal.id).toLocaleString()}
-                </p>
-              </div>
-              <div className="flex items-center space-x-1 px-2.5 py-1 rounded bg-emerald-500 text-slate-950 font-bold text-[10px] uppercase">
-                <ShieldCheck size={14} />
-                <span>Verified</span>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <h4 className="text-[10px] uppercase font-mono tracking-wider font-bold text-slate-400">Payment Breakdown</h4>
-              
-              {getMemberPayments(selectedMemberModal.id).length === 0 ? (
-                <p className="text-xs text-slate-500 py-4 text-center font-mono uppercase">No payment entries found.</p>
-              ) : (
-                <div className={`border rounded-xl overflow-hidden ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
-                  <table className="w-full text-left text-xs font-mono">
-                    <thead>
-                      <tr className={`border-b uppercase text-[10px] ${isDark ? 'border-slate-800 bg-slate-950 text-slate-400' : 'border-slate-200 bg-slate-100 text-slate-600'}`}>
-                        <th className="py-2 px-2.5">Category</th>
-                        <th className="py-2 px-2.5">Description</th>
-                        <th className="py-2 px-2.5 text-right">Amount</th>
-                        {isAdmin && <th className="py-2 px-2 text-center">Action</th>}
-                      </tr>
-                    </thead>
-                    <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
-                      {getMemberPayments(selectedMemberModal.id).map(p => (
-                        <tr key={p.id}>
-                          <td className="py-2 px-2.5 font-bold text-emerald-400">{p.category}</td>
-                          <td className="py-2 px-2.5 text-slate-300 truncate max-w-[100px]">{p.description}</td>
-                          <td className="py-2 px-2.5 text-right font-bold text-white">K{p.amount}</td>
-                          {isAdmin && (
-                            <td className="py-2 px-2 text-center">
-                              <button onClick={() => handleDeletePayment(p.id)} className="text-slate-500 hover:text-rose-400">
-                                <Trash2 size={13} />
-                              </button>
-                            </td>
-                          )}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <span className="text-xs font-semibold text-emerald-500 uppercase tracking-wider">Member Statement</span>
+                <h3 className="text-lg font-bold mt-0.5">{selectedMemberModal.name}</h3>
+                <div className={`flex flex-wrap items-center gap-2 mt-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  <span className="font-mono">ID: {selectedMemberModal.student_id || 'Unassigned'}</span>
+                  <span>•</span>
+                  <span>{selectedMemberModal.email || 'No email on file'}</span>
                 </div>
-              )}
+              </div>
+              <button 
+                onClick={() => setSelectedMemberModal(null)} 
+                className={`p-1.5 rounded-lg transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-800 hover:text-white' : 'text-slate-500 hover:bg-slate-100'}`}
+              >
+                <X size={18} />
+              </button>
             </div>
 
-            <div className="mt-5 flex items-center justify-between pt-2">
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-5">
+              <div className={`p-4 rounded-xl border flex items-center justify-between ${
+                isDark ? 'border-emerald-800/50 bg-emerald-950/30' : 'border-emerald-200 bg-emerald-50/70'
+              }`}>
+                <div>
+                  <p className={`text-xs font-medium ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>Cumulative Contributions</p>
+                  <p className="text-2xl font-bold mt-0.5 font-mono tabular-nums text-emerald-500">
+                    ZMW {getMemberTotal(selectedMemberModal.id).toLocaleString()}
+                  </p>
+                </div>
+                <div className="flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-600 text-white font-semibold text-xs">
+                  <ShieldCheck size={14} />
+                  <span>Verified</span>
+                </div>
+              </div>
+
+              <div className="space-y-2.5">
+                <h4 className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  Transaction History
+                </h4>
+                
+                {getMemberPayments(selectedMemberModal.id).length === 0 ? (
+                  <div className={`py-8 text-center rounded-xl border text-xs ${
+                    isDark ? 'border-slate-800 text-slate-400' : 'border-slate-200 text-slate-500'
+                  }`}>
+                    No transactions recorded for this member.
+                  </div>
+                ) : (
+                  <div className={`border rounded-xl overflow-hidden ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className={`border-b font-semibold ${isDark ? 'border-slate-800 bg-slate-950/60 text-slate-400' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
+                          <th className="py-2.5 px-3.5">Category</th>
+                          <th className="py-2.5 px-3.5">Description</th>
+                          <th className="py-2.5 px-3.5">Date</th>
+                          <th className="py-2.5 px-3.5 text-right">Amount</th>
+                          {isAdmin && <th className="py-2.5 px-3 text-center">Void</th>}
+                        </tr>
+                      </thead>
+                      <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
+                        {getMemberPayments(selectedMemberModal.id).map(p => (
+                          <tr key={p.id}>
+                            <td className="py-2.5 px-3.5 font-semibold text-emerald-500">{p.category}</td>
+                            <td className={`py-2.5 px-3.5 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{p.description}</td>
+                            <td className={`py-2.5 px-3.5 font-mono ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{p.date}</td>
+                            <td className="py-2.5 px-3.5 text-right font-mono font-semibold tabular-nums">K{Number(p.amount).toLocaleString()}</td>
+                            {isAdmin && (
+                              <td className="py-2.5 px-3 text-center">
+                                <button onClick={() => handleDeletePayment(p.id)} className="text-slate-400 hover:text-rose-500 p-1">
+                                  <Trash2 size={14} />
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className={`px-6 py-4 border-t flex items-center justify-between ${isDark ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-slate-50'}`}>
               {isAdmin ? (
                 <button
                   onClick={() => handleDeleteMember(selectedMemberModal.id)}
-                  className="px-3 py-2 rounded-xl text-xs font-bold uppercase text-rose-400 hover:bg-rose-500/10 flex items-center space-x-1 border border-rose-500/20"
+                  className="px-3.5 py-2 rounded-lg text-xs font-semibold text-rose-500 hover:bg-rose-500/10 flex items-center space-x-1.5 border border-rose-500/20 transition-colors"
                 >
-                  <UserX size={15} />
-                  <span>Delete Person</span>
+                  <UserX size={14} />
+                  <span>Remove Member</span>
                 </button>
               ) : <div />}
 
               <button
                 onClick={() => setSelectedMemberModal(null)}
-                className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase border ${
-                  isDark ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-300 bg-slate-100 text-slate-800'
+                className={`px-4 py-2 rounded-lg text-xs font-semibold border transition-colors ${
+                  isDark ? 'border-slate-700 bg-slate-800 hover:bg-slate-700 text-white' : 'border-slate-300 bg-white hover:bg-slate-100 text-slate-800'
                 }`}
               >
-                Close
+                Close Statement
               </button>
             </div>
           </div>
@@ -841,72 +917,67 @@ export default function App() {
 
       {/* ADD MEMBER MODAL */}
       {isAddMemberOpen && isAdmin && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md">
-          <div className={`w-full max-w-md sm:rounded-2xl rounded-t-2xl border p-5 relative ${
-            isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/75 backdrop-blur-sm p-0 sm:p-4">
+          <div className={`w-full max-w-md sm:rounded-2xl rounded-t-2xl border shadow-2xl overflow-hidden ${
+            isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
           }`}>
-            <button onClick={() => setIsAddMemberOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white">
-              <X size={18} />
-            </button>
+            <div className={`px-6 py-4 border-b flex items-center justify-between ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+              <h3 className="text-base font-bold">Register New Member</h3>
+              <button onClick={() => setIsAddMemberOpen(false)} className="text-slate-400 hover:text-slate-200">
+                <X size={18} />
+              </button>
+            </div>
 
-            <h3 className="text-base font-bold uppercase tracking-wide mb-3">Add Person to Database</h3>
-
-            <form onSubmit={handleAddMember} className="space-y-3 text-xs font-mono">
+            <form onSubmit={handleAddMember} className="p-6 space-y-4">
               <div>
-                <label className="block text-slate-400 uppercase mb-1 text-[10px]">Full Name *</label>
+                <label className={labelClass}>Full Name <span className="text-rose-500">*</span></label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Dinda Nkeete"
                   value={newMember.name}
                   onChange={e => setNewMember({ ...newMember, name: e.target.value })}
-                  className={`w-full p-2.5 rounded-xl border text-xs focus:outline-none ${
-                    isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-                  }`}
+                  className={inputClass}
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 uppercase mb-1 text-[10px]">Student ID Number</label>
+                <label className={labelClass}>Student ID Number</label>
                 <input
                   type="text"
-                  placeholder="e.g. 202500652"
+                  placeholder="e.g. 202501869"
                   value={newMember.studentId}
                   onChange={e => setNewMember({ ...newMember, studentId: e.target.value })}
-                  className={`w-full p-2.5 rounded-xl border text-xs focus:outline-none ${
-                    isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-                  }`}
+                  className={inputClass}
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 uppercase mb-1 text-[10px]">Email Address</label>
+                <label className={labelClass}>Email Address</label>
                 <input
                   type="email"
-                  placeholder="e.g. user@example.com"
+                  placeholder="member@example.com"
                   value={newMember.email}
                   onChange={e => setNewMember({ ...newMember, email: e.target.value })}
-                  className={`w-full p-2.5 rounded-xl border text-xs focus:outline-none ${
-                    isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-                  }`}
+                  className={inputClass}
                 />
               </div>
 
-              <div className="pt-2 flex space-x-2">
+              <div className="pt-2 flex space-x-3">
                 <button
                   type="button"
                   onClick={() => setIsAddMemberOpen(false)}
-                  className={`flex-1 py-2.5 rounded-xl text-xs uppercase border ${
-                    isDark ? 'border-slate-800 text-slate-400' : 'border-slate-300 text-slate-600'
+                  className={`flex-1 py-2.5 rounded-lg text-xs font-semibold border transition-colors ${
+                    isDark ? 'border-slate-700 text-slate-300 hover:bg-slate-800' : 'border-slate-300 text-slate-700 hover:bg-slate-50'
                   }`}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 rounded-xl text-xs uppercase font-bold bg-emerald-500 text-slate-950"
+                  className="flex-1 py-2.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
                 >
-                  Save Person
+                  Save Member
                 </button>
               </div>
             </form>
@@ -916,28 +987,27 @@ export default function App() {
 
       {/* ADD PAYMENT MODAL */}
       {isAddPaymentOpen && isAdmin && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md">
-          <div className={`w-full max-w-md sm:rounded-2xl rounded-t-2xl border p-5 relative max-h-[90vh] overflow-y-auto ${
-            isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/75 backdrop-blur-sm p-0 sm:p-4">
+          <div className={`w-full max-w-md sm:rounded-2xl rounded-t-2xl border shadow-2xl overflow-hidden max-h-[92vh] flex flex-col ${
+            isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
           }`}>
-            <button onClick={() => setIsAddPaymentOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white">
-              <X size={18} />
-            </button>
+            <div className={`px-6 py-4 border-b flex items-center justify-between ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+              <h3 className="text-base font-bold">Record Payment Transaction</h3>
+              <button onClick={() => setIsAddPaymentOpen(false)} className="text-slate-400 hover:text-slate-200">
+                <X size={18} />
+              </button>
+            </div>
 
-            <h3 className="text-base font-bold uppercase tracking-wide mb-3">Log Payment Entry</h3>
-
-            <form onSubmit={handleAddPayment} className="space-y-3 text-xs font-mono">
+            <form onSubmit={handleAddPayment} className="p-6 space-y-4 overflow-y-auto">
               <div>
-                <label className="block text-slate-400 uppercase mb-1 text-[10px]">Select Person *</label>
+                <label className={labelClass}>Member <span className="text-rose-500">*</span></label>
                 <select
                   required
                   value={newPayment.memberId}
                   onChange={e => setNewPayment({ ...newPayment, memberId: e.target.value })}
-                  className={`w-full p-2.5 rounded-xl border text-xs focus:outline-none ${
-                    isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-                  }`}
+                  className={inputClass}
                 >
-                  <option value="">-- Choose Member --</option>
+                  <option value="">Select a registered member...</option>
                   {members.map(m => (
                     <option key={m.id} value={m.id}>
                       {m.name} ({m.student_id || 'No ID'})
@@ -947,13 +1017,11 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block text-slate-400 uppercase mb-1 text-[10px]">Category *</label>
+                <label className={labelClass}>Payment Category <span className="text-rose-500">*</span></label>
                 <select
                   value={newPayment.category}
                   onChange={e => setNewPayment({ ...newPayment, category: e.target.value })}
-                  className={`w-full p-2.5 rounded-xl border text-xs focus:outline-none ${
-                    isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-                  }`}
+                  className={inputClass}
                 >
                   <option value="Membership">Membership Dues</option>
                   <option value="Tour">Student Tour</option>
@@ -965,7 +1033,7 @@ export default function App() {
 
               {newPayment.category === 'Membership' && (
                 <div>
-                  <label className="block text-slate-400 uppercase mb-1 text-[10px]">Membership Package</label>
+                  <label className={labelClass}>Membership Tier</label>
                   <select
                     value={newPayment.membershipType}
                     onChange={e => {
@@ -973,12 +1041,10 @@ export default function App() {
                       setNewPayment({
                         ...newPayment,
                         membershipType: e.target.value,
-                        amount: tier ? tier.price : 150
+                        amount: tier ? tier.price : 50
                       });
                     }}
-                    className={`w-full p-2.5 rounded-xl border text-xs focus:outline-none ${
-                      isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-                    }`}
+                    className={inputClass}
                   >
                     {MEMBERSHIP_TIERS.map(t => (
                       <option key={t.id} value={t.id}>
@@ -991,88 +1057,78 @@ export default function App() {
 
               {newPayment.category === 'Tour' && (
                 <div>
-                  <label className="block text-slate-400 uppercase mb-1 text-[10px]">Tour Name / Destination</label>
+                  <label className={labelClass}>Tour Destination</label>
                   <input
                     type="text"
                     value={newPayment.tourName}
                     onChange={e => setNewPayment({ ...newPayment, tourName: e.target.value })}
                     placeholder="e.g. Livingstone Tour 2026"
-                    className={`w-full p-2.5 rounded-xl border text-xs focus:outline-none ${
-                      isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-                    }`}
+                    className={inputClass}
                   />
                 </div>
               )}
 
               {newPayment.category === 'Custom' && (
                 <div>
-                  <label className="block text-slate-400 uppercase mb-1 text-[10px]">Description / Note</label>
+                  <label className={labelClass}>Payment Description</label>
                   <input
                     type="text"
                     value={newPayment.customCategory}
                     onChange={e => setNewPayment({ ...newPayment, customCategory: e.target.value })}
-                    placeholder="e.g. T-Shirt Only"
-                    className={`w-full p-2.5 rounded-xl border text-xs focus:outline-none ${
-                      isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-                    }`}
+                    placeholder="e.g. Department Merch"
+                    className={inputClass}
                   />
                 </div>
               )}
 
               <div>
-                <label className="block text-slate-400 uppercase mb-1 text-[10px]">Amount Paid (ZMW) *</label>
+                <label className={labelClass}>Amount (ZMW) <span className="text-rose-500">*</span></label>
                 <input
                   type="number"
                   required
                   value={newPayment.amount}
                   onChange={e => setNewPayment({ ...newPayment, amount: e.target.value })}
-                  className={`w-full p-2.5 rounded-xl border text-xs focus:outline-none ${
-                    isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-                  }`}
+                  className={`${inputClass} font-mono`}
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 uppercase mb-1 text-[10px]">Year</label>
+                  <label className={labelClass}>Academic Year</label>
                   <input
                     type="text"
                     value={newPayment.year}
                     onChange={e => setNewPayment({ ...newPayment, year: e.target.value })}
-                    className={`w-full p-2.5 rounded-xl border text-xs focus:outline-none ${
-                      isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-                    }`}
+                    className={`${inputClass} font-mono`}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 uppercase mb-1 text-[10px]">Payment Date</label>
+                  <label className={labelClass}>Transaction Date</label>
                   <input
                     type="date"
                     value={newPayment.date}
                     onChange={e => setNewPayment({ ...newPayment, date: e.target.value })}
-                    className={`w-full p-2.5 rounded-xl border text-xs focus:outline-none ${
-                      isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-                    }`}
+                    className={`${inputClass} font-mono`}
                   />
                 </div>
               </div>
 
-              <div className="pt-2 flex space-x-2">
+              <div className="pt-2 flex space-x-3">
                 <button
                   type="button"
                   onClick={() => setIsAddPaymentOpen(false)}
-                  className={`flex-1 py-2.5 rounded-xl text-xs uppercase border ${
-                    isDark ? 'border-slate-800 text-slate-400' : 'border-slate-300 text-slate-600'
+                  className={`flex-1 py-2.5 rounded-lg text-xs font-semibold border transition-colors ${
+                    isDark ? 'border-slate-700 text-slate-300 hover:bg-slate-800' : 'border-slate-300 text-slate-700 hover:bg-slate-50'
                   }`}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 rounded-xl text-xs uppercase font-bold bg-emerald-500 text-slate-950"
+                  className="flex-1 py-2.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
                 >
-                  Save Entry
+                  Post Transaction
                 </button>
               </div>
             </form>
