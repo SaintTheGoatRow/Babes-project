@@ -574,45 +574,10 @@ export default function App() {
       </header>
 
       {/* MAIN CONTENT CONTAINER */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8 space-y-4 sm:space-y-6">
         
-        {/* KPI METRIC CARDS */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className={`p-5 rounded-xl border ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white shadow-sm'}`}>
-            <div className="flex items-center justify-between">
-              <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Registered Members</span>
-              <div className={`p-2 rounded-lg ${isDark ? 'bg-slate-800 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>
-                <Users size={16} />
-              </div>
-            </div>
-            <p className="text-2xl sm:text-3xl font-bold mt-2 font-mono tabular-nums">{members.length}</p>
-          </div>
-
-          <div className={`p-5 rounded-xl border ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white shadow-sm'}`}>
-            <div className="flex items-center justify-between">
-              <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Recorded Transactions</span>
-              <div className={`p-2 rounded-lg ${isDark ? 'bg-slate-800 text-sky-400' : 'bg-sky-50 text-sky-600'}`}>
-                <CreditCard size={16} />
-              </div>
-            </div>
-            <p className="text-2xl sm:text-3xl font-bold mt-2 font-mono tabular-nums">{payments.length}</p>
-          </div>
-
-          <div className={`p-5 rounded-xl border ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white shadow-sm'}`}>
-            <div className="flex items-center justify-between">
-              <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Total Treasury Balance</span>
-              <div className={`p-2 rounded-lg ${isDark ? 'bg-slate-800 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>
-                <Wallet size={16} />
-              </div>
-            </div>
-            <p className="text-2xl sm:text-3xl font-bold mt-2 font-mono tabular-nums text-emerald-500">
-              ZMW {payments.reduce((acc, p) => acc + Number(p.amount), 0).toLocaleString()}
-            </p>
-          </div>
-        </div>
-
-        {/* TOOLBAR: SEARCH & ACTIONS */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        {/* 1. TOOLBAR: SEARCH & ACTIONS (AT TOP) */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
           <div className={`relative flex-1 max-w-md rounded-lg border ${
             isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-300 bg-white shadow-sm'
           }`}>
@@ -628,12 +593,12 @@ export default function App() {
             />
           </div>
 
-          <div className="flex items-center space-x-2.5">
+          <div className="flex items-center space-x-2 sm:space-x-2.5">
             {isAdmin && (
               <>
                 <button
                   onClick={() => setIsAddMemberOpen(true)}
-                  className="flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center justify-center space-x-1.5 bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-sm"
+                  className="flex-1 sm:flex-none px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center justify-center space-x-1.5 bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-sm"
                 >
                   <UserPlus size={15} />
                   <span>Add Member</span>
@@ -641,14 +606,14 @@ export default function App() {
 
                 <button
                   onClick={() => setIsAddPaymentOpen(true)}
-                  className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center justify-center space-x-1.5 border transition-colors ${
+                  className={`flex-1 sm:flex-none px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center justify-center space-x-1.5 border transition-colors ${
                     isDark 
                       ? 'border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-100' 
                       : 'border-slate-300 bg-white hover:bg-slate-50 text-slate-800 shadow-sm'
                   }`}
                 >
                   <Plus size={15} />
-                  <span>Record Payment</span>
+                  <span>Record</span>
                 </button>
               </>
             )}
@@ -668,7 +633,57 @@ export default function App() {
           </div>
         </div>
 
-        {/* MOBILE LIST VIEW (< sm) */}
+        {/* 2. COMPACT HORIZONTAL KPI METRIC CARDS (UNDER SEARCH BAR) */}
+        <div className="grid grid-cols-3 gap-2 sm:gap-4">
+          <div className={`p-2.5 sm:p-5 rounded-xl border ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white shadow-sm'}`}>
+            <div className="flex items-center justify-between">
+              <span className={`text-[10px] sm:text-xs font-medium truncate ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                <span className="sm:hidden">Members</span>
+                <span className="hidden sm:inline">Registered Members</span>
+              </span>
+              <div className={`p-1 sm:p-2 rounded-lg hidden xs:block ${isDark ? 'bg-slate-800 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>
+                <Users size={14} className="sm:w-4 sm:h-4" />
+              </div>
+            </div>
+            <p className="text-base sm:text-3xl font-bold mt-1 sm:mt-2 font-mono tabular-nums">
+              {members.length}
+            </p>
+          </div>
+
+          <div className={`p-2.5 sm:p-5 rounded-xl border ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white shadow-sm'}`}>
+            <div className="flex items-center justify-between">
+              <span className={`text-[10px] sm:text-xs font-medium truncate ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                <span className="sm:hidden">Entries</span>
+                <span className="hidden sm:inline">Recorded Transactions</span>
+              </span>
+              <div className={`p-1 sm:p-2 rounded-lg hidden xs:block ${isDark ? 'bg-slate-800 text-sky-400' : 'bg-sky-50 text-sky-600'}`}>
+                <CreditCard size={14} className="sm:w-4 sm:h-4" />
+              </div>
+            </div>
+            <p className="text-base sm:text-3xl font-bold mt-1 sm:mt-2 font-mono tabular-nums">
+              {payments.length}
+            </p>
+          </div>
+
+          <div className={`p-2.5 sm:p-5 rounded-xl border ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white shadow-sm'}`}>
+            <div className="flex items-center justify-between">
+              <span className={`text-[10px] sm:text-xs font-medium truncate ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                <span className="sm:hidden">Balance</span>
+                <span className="hidden sm:inline">Total Treasury Balance</span>
+              </span>
+              <div className={`p-1 sm:p-2 rounded-lg hidden xs:block ${isDark ? 'bg-slate-800 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>
+                <Wallet size={14} className="sm:w-4 sm:h-4" />
+              </div>
+            </div>
+            <p className="text-sm sm:text-3xl font-bold mt-1 sm:mt-2 font-mono tabular-nums text-emerald-500 truncate">
+              <span className="sm:hidden">K</span>
+              <span className="hidden sm:inline">ZMW </span>
+              {payments.reduce((acc, p) => acc + Number(p.amount), 0).toLocaleString()}
+            </p>
+          </div>
+        </div>
+
+        {/* 3. MOBILE LIST VIEW (< sm) */}
         <div className="block sm:hidden space-y-2.5">
           {filteredMembers.length === 0 ? (
             <div className={`py-12 text-center rounded-xl border text-sm ${
@@ -683,7 +698,7 @@ export default function App() {
                 <div
                   key={m.id}
                   onClick={() => setSelectedMemberModal(m)}
-                  className={`p-4 rounded-xl border transition-all active:scale-[0.99] flex items-center justify-between ${
+                  className={`p-3.5 rounded-xl border transition-all active:scale-[0.99] flex items-center justify-between ${
                     isDark ? 'border-slate-800 bg-slate-900 text-slate-100' : 'border-slate-200 bg-white text-slate-900 shadow-sm'
                   }`}
                 >
@@ -720,7 +735,7 @@ export default function App() {
           )}
         </div>
 
-        {/* DESKTOP LEDGER TABLE (>= sm) */}
+        {/* 4. DESKTOP LEDGER TABLE (>= sm) */}
         <div className={`hidden sm:block border rounded-xl overflow-hidden ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white shadow-sm'}`}>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
